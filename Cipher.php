@@ -84,7 +84,7 @@ class Cipher {
 		'blockmode' => 'cbc',
 		'cipher' => MCRYPT_RIJNDAEL_192,
 		'base' => false,
-		'key' => 'obfuscate me',
+		'key' => 'The Narwhals bacon at midnight',
 		'iv' => false,
 		'base64CharList' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 	);
@@ -167,7 +167,7 @@ class Cipher {
 			$num = (int) $num;
 		}
 		elseif (strlen($num)) {
-			trigger_error("Cipher::setBase() Unknown base `$num`");
+			trigger_error("Cipher::setBase() Unknown base `$num`", E_USER_ERROR);
 		}
 		else {
 			$num = false;
@@ -259,7 +259,7 @@ class Cipher {
 			$this->{"_$name"} = $value;	
 		}
 		else {
-			trigger_error("Cipher::setOption() option `$name` not valid.", E_USER_WARNING);
+			trigger_error("Cipher::setOption() option `$name` not valid.", E_USER_NOTICE);
 		}
 		return $this;
 	}
@@ -431,12 +431,13 @@ class Cipher {
 		}
 		$key = base64_encode($key);
 		$keylen = strlen($key);
+		$randomOffset = rand(0,$keylen);
 		$str = base64_encode($this->_raw);
 		$strlen = strlen($str);
-		$buffer = '';
+		$buffer = chr($randomOffset);
 		for ($i = 0; $i < $strlen; $i++) {
 			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, $i % $keylen, 1));
+			$keyord = ord(substr($key, ($i + $randomOffset) % $keylen, 1));
 			$buffer .= chr($strord ^ $keyord);
 		}
 		$buffer = $this->_baseEncode($buffer);
@@ -453,20 +454,29 @@ class Cipher {
 		if ($key === null) {
 			$key = $this->_key;
 		}
-		$str = $this->_raw;
-		$str = $this->_baseDecode($str);	
+		$str = $this->_baseDecode($this->_raw);		
+		$randomOffset = ord($str{0});
+		$str = substr($str,1);
 		$key = base64_encode($key);
 		$keylen = strlen($key);
 		$strlen = strlen($str);
 		$buffer = '';
 		for ($i = 0; $i < $strlen; $i++) {
 			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, $i % $keylen, 1));
+			$keyord = ord(substr($key, ($i + $randomOffset) % $keylen, 1));
 			$buffer .= chr($strord ^ $keyord);
 		}
 		$buffer = base64_decode($buffer);
 		return $buffer;
 	}
+	
+	public function encode() {
+		return $this->_baseEncode($this->raw);
+	}
+	
+	public function decode() {
+		return $this->_baseDecode($this->raw);
+	}	
 	
 	/**
 	 * Produce a random hash of the given length
@@ -649,33 +659,33 @@ class Cipher {
 //
 Cipher::registerBaseEncoder(Cipher::BASE_USER_SAFE, 
 	// remove all vowels to avoid bad words and remove symbols for simplicity
-	function($str) {
-		return Cipher::baseConvertString($str,
+	create_function('$str', "
+		return Cipher::baseConvertString(\$str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
 		);
-	}, 
-	function($str) {
-		return Cipher::baseConvertString($str,
+	"), 
+	create_function('$str', "
+		return Cipher::baseConvertString(\$str,
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	}
+	")
 );
 
 Cipher::registerBaseEncoder(Cipher::BASE_PRINTABLE, 
 	// keep only characters that are highly visually distinct
 	// e.g. a password that you might right down
-	function($str) {
-		return Cipher::baseConvertString($str,
+	create_function('$str', "
+		return Cipher::baseConvertString(\$str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'3467bcdfhjkmnpqrtvwxy'
 		);
-	}, 
-	function($str) {
-		return Cipher::baseConvertString($str,
+	"), 
+	create_function('$str', "
+		return Cipher::baseConvertString(\$str,
 			'3467bcdfhjkmnpqrtvwxy',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	}
+	")
 );
