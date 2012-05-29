@@ -54,7 +54,7 @@ $options = array(
 	// use Rijndael 128
 	'cipher' => MCRYPT_RIJNDAEL_128,
 );
-Cipher::createPreset('CreditCards', $options);
+Cipher::createPreset('CreditCard', $options);
 // encrypt a credit card number
 $pan = '4111-1111-1111-1111';
 $encrypted = Cipher::usePreset('CreditCard', $pan)->encrypt();
