@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Class for encrypting, obfuscating and hashing strings with the ability to specify an arbitrary base for output
+ * Object-Oriented PHP class for encrypting, obfuscating and hashing strings with the ability to specify an arbitrary base for output
  */
 class Cipher {
 	
@@ -58,6 +58,13 @@ class Cipher {
 	protected $_base64CharList;
 	
 	/**
+	 * If false, null bytes will be stripped (and lost) from the end of the plaintext
+	 * 
+	 * @var bool
+	 */
+	protected $_nullSafe;
+	
+	/**
 	 * List of registered base encoder functions. 
 	 * Each item is an associative array with callbacks at key "encode" and key "decode"
 	 * 
@@ -87,6 +94,7 @@ class Cipher {
 		'key' => 'The Narwhals bacon at midnight',
 		'iv' => false,
 		'base64CharList' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
+		'nullSafe' => true
 	);
 	
 	/**
@@ -167,7 +175,7 @@ class Cipher {
 			$num = (int) $num;
 		}
 		elseif (strlen($num)) {
-			trigger_error("Cipher::setBase() Unknown base `$num`", E_USER_ERROR);
+			trigger_error("Cipher::setBase() Unknown base `$num`");
 		}
 		else {
 			$num = false;
@@ -238,34 +246,66 @@ class Cipher {
 		return $this->_iv;
 	}
 	
+	/**
+	 * Set the Character List used for base-64 encoding. It defaults to the traditional set
+	 * 
+	 * @param string $str
+	 * @return \Cipher 
+	 */
 	public function setBase64CharList($str) {
 		$this->_base64CharList = $str;
 		return $this;
 	}
 	
+	/**
+	 * Get the current Character List used for base-64 encoding
+	 * 
+	 * @return string
+	 */
 	public function getBase64CharList() {
 		return $this->_base64CharList;
 	}
 	
 	/**
-	 * Set an option
+	 * If true, account for null bytes that may be at the end of your plaintext
 	 * 
-	 * @param string $name  "blockmode", "cipher", "base", "key", "iv", "base64CharList" or "raw"
+	 * @param bool $on
+	 * @return \Cipher 
+	 */
+	public function setNullSafe($on) {
+		$this->_nullSafe = $on;
+		return $this;
+	}
+
+	/**
+	 * Get the current setting for handling null bytes.
+	 * If true, null bytes at the end of the plaintext will be preserved
+	 * 
+	 * @return bool 
+	 */
+	public function getNullSafe() {
+		return $this->_nullSafe;
+	}	
+	
+	/**
+	 * Set the given option
+	 * 
+	 * @param string $name  "blockmode", "cipher", "base", "key", "iv", "base64CharList", or "nullSafe"
 	 * @param mixed $value
 	 * @return \Cipher 
 	 */
 	public function setOption($name, $value) {
-		if (in_array($name, array('blockmode','cipher','base','key','iv','base64CharList'))) {
+		if (in_array($name, array('blockmode','cipher','base','key','iv','base64CharList','nullSafe'))) {
 			$this->{"_$name"} = $value;	
 		}
 		else {
-			trigger_error("Cipher::setOption() option `$name` not valid.", E_USER_NOTICE);
+			trigger_error("Cipher::setOption() option `$name` not valid.", E_USER_WARNING);
 		}
 		return $this;
 	}
 	
 	/**
-	 * Set options using key-value pairs
+	 * Set multiple options using key-value pairs
 	 * 
 	 * @param array $values
 	 * @return \Cipher 
@@ -278,7 +318,7 @@ class Cipher {
 	}
 	
 	/**
-	 * Get a single option
+	 * Get the value of a single option
 	 * 
 	 * @param string $name
 	 * @return mixed
@@ -288,13 +328,13 @@ class Cipher {
 	}
 	
 	/**
-	 * Get all options
+	 * Get the value of all options
 	 * 
 	 * @return array
 	 */
 	public function getOptions() {
 		$options = array();
-		foreach (array('blockmode','cipher','base','key','iv','base64CharList') as $name) {
+		foreach (array('blockmode','cipher','base','key','iv','base64CharList','nullSafe') as $name) {
 			$options[$name] = $this->getOption($name);
 		}
 		return $options;
@@ -317,11 +357,11 @@ class Cipher {
 	 *   $encryptedConfNum = Cipher::usePreset('ConfirmationNumber', '0123456789')->encrypt();
 	 *   $confNum = Cipher::usePreset('ConfirmationNumber', $encryptedConfNum)->decrypt(); 
 	 * 
-	 * @param string $name  The name you will use to access the preset via self::usePreset()
-	 * @param array $params  See self::$defaultOptions for available options
+	 * @param string $name  The name you will use to access the preset via Cipher::usePreset($name, $text)
+	 * @param array $options  See self::$defaultOptions for available options
 	 */
-	public static function createPreset($name, $params) {
-		self::$presets[$name] = $params;
+	public static function createPreset($name, $options) {
+		self::$presets[$name] = $options;
 	}
 	
 	/**
@@ -334,7 +374,7 @@ class Cipher {
 	 *   $encryptedConfNum = Cipher::usePreset('ConfirmationNumber', '0123456789')->encrypt();
 	 *   $confNum = Cipher::usePreset('ConfirmationNumber', $encryptedConfNum)->decrypt();
 	 * 
-	 * @param type $name  The name it was defined with
+	 * @param type $name  The name it was defined with in Cipher::createPreset($name, $options)
 	 * @param type $text  The text to encrypt/decrypt
 	 * @return mixed
 	 */
@@ -343,7 +383,7 @@ class Cipher {
 	}
 	
 	/**
-	 * Return subject
+	 * Return subject text if casted to a string. May be encrypted or decrypted.
 	 * 
 	 * @return string
 	 */
@@ -376,6 +416,7 @@ class Cipher {
 			$iv = mcrypt_create_iv($ivsize);
 		}
 		$decrypted = (string) $this->_raw;
+		$decrypted = $this->_handleNullBytesOnEncrypt($decrypted);
 		$encrypted = mcrypt_encrypt($this->_cipher, $key, $decrypted, $this->_blockmode, $iv);
 		if (!$this->_iv) {
 			$encrypted = $iv . $encrypted;
@@ -416,7 +457,61 @@ class Cipher {
 			$encrypted = substr($str, $ivsize);
 		}
 		$decrypted = mcrypt_decrypt($this->_cipher, $key, $encrypted, $this->_blockmode, $iv);
+		$decrypted = $this->_handleNullBytesOnDecrypt($decrypted);
 		return $decrypted;
+	}
+	
+	/**
+	 * If the nullSafe option is true, preserve trailing null bytes
+	 * What we actually to is read the prepended number that represents the count of trailing null bytes.
+	 * The number and plaintext are delimited by \x01
+	 * 
+	 * @param string $decrypted
+	 * @return string 
+	 */
+	protected function _handleNullBytesOnDecrypt($decrypted) {
+		if ($decrypted == '') {
+			return '';
+		}		
+		$decrypted = rtrim($decrypted, "\x00");
+		if ($this->_nullSafe && ($pos = strpos($decrypted, "\x01"))) {
+			// we may need to add some null bytes back on the end
+			$numNullBytes = (int) substr($decrypted, 0, $pos);
+			if ($numNullBytes > 0) {
+				$decrypted .= str_repeat("\x00", $numNullBytes);
+			}
+			$decrypted = substr($decrypted, strlen($numNullBytes) + 1);
+		}
+		return $decrypted;
+	}
+	
+	/**
+	 * If the nullSafe option is true, preserve trailing null bytes
+	 * What we actually do is prepend a number representing the count of trailing null bytes followed by \x01
+	 * 
+	 * @param string $decrypted
+	 * @return string 
+	 */
+	protected function _handleNullBytesOnEncrypt($decrypted) {
+		if ($decrypted == '') {
+			return '';
+		}
+		if ($this->_nullSafe) {
+			// find the number of trailing null bytes
+			$length = strlen($decrypted);
+			$numNullBytes = 0;
+			while (--$length) {
+				if ($decrypted{$length} == "\x00") {
+					$numNullBytes++;
+				}
+				else {
+					break;
+				}
+			}
+			// prepend number of trailing null bytes
+			$decrypted = $numNullBytes . "\x01" . $decrypted;
+		}
+		return $decrypted;		
 	}
 	
 	/**
@@ -431,13 +526,12 @@ class Cipher {
 		}
 		$key = base64_encode($key);
 		$keylen = strlen($key);
-		$randomOffset = rand(0,$keylen);
 		$str = base64_encode($this->_raw);
 		$strlen = strlen($str);
-		$buffer = chr($randomOffset);
+		$buffer = '';
 		for ($i = 0; $i < $strlen; $i++) {
 			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, ($i + $randomOffset) % $keylen, 1));
+			$keyord = ord(substr($key, $i % $keylen, 1));
 			$buffer .= chr($strord ^ $keyord);
 		}
 		$buffer = $this->_baseEncode($buffer);
@@ -454,29 +548,20 @@ class Cipher {
 		if ($key === null) {
 			$key = $this->_key;
 		}
-		$str = $this->_baseDecode($this->_raw);		
-		$randomOffset = ord($str{0});
-		$str = substr($str,1);
+		$str = $this->_raw;
+		$str = $this->_baseDecode($str);	
 		$key = base64_encode($key);
 		$keylen = strlen($key);
 		$strlen = strlen($str);
 		$buffer = '';
 		for ($i = 0; $i < $strlen; $i++) {
 			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, ($i + $randomOffset) % $keylen, 1));
+			$keyord = ord(substr($key, $i % $keylen, 1));
 			$buffer .= chr($strord ^ $keyord);
 		}
 		$buffer = base64_decode($buffer);
 		return $buffer;
 	}
-	
-	public function encode() {
-		return $this->_baseEncode($this->raw);
-	}
-	
-	public function decode() {
-		return $this->_baseDecode($this->raw);
-	}	
 	
 	/**
 	 * Produce a random hash of the given length
@@ -569,7 +654,7 @@ class Cipher {
 	protected function _baseEncode($str) {
 		if ($this->_base) {
 			$str = base64_encode($str);			
-			$str = rtrim($str, '='); // equals signs are just padding that php doesn't need to decode
+			//$str = rtrim($str, '='); // equals signs are just padding that php doesn't need to decode
 		}
 		if (isset(self::$_baseEncoders[$this->_base])) {
 			$str = call_user_func(self::$_baseEncoders[$this->_base]['encode'], $str);
@@ -649,6 +734,7 @@ class Cipher {
 			$zeroPad = str_repeat($toZero, strlen($match[0]));
 			$result = $zeroPad . $result;
 		}
+		trim($result, "\x00");
 		return $result;	
 	}
 	
