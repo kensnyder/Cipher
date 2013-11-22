@@ -6,7 +6,27 @@ Object-Oriented PHP class for encrypting, obfuscating and hashing strings with t
 The idea is that you create an object representing certain encryption settings. Then you give it strings to encrypt or decrypt.
 
 Encryption
-==
+====
+
+Configure a set of options to reuse throughout your application:
+```php
+<?php
+
+$options = array(
+	// convert output to base 62
+	'base' => 62,
+	// use Rijndael 128
+	'cipher' => MCRYPT_RIJNDAEL_128,
+);
+Cipher::preset('CreditCard', $options);
+// encrypt a credit card number
+$pan = '4111-1111-1111-1111';
+$encrypted = Cipher::preset('CreditCard')->encrypt($pan);
+// "75akCejJpGdZhaWX5ISQPz6uKMcDSdJoTgVfuzYkiK9UpKRLp3wtPSUNWpcBMoCc4"
+// Note: Encrypted strings will be different every time because iv is stored with the output
+echo Cipher::preset('CreditCard')->decrypt($encrypted);
+// 4111-1111-1111-1111
+```
 
 Example using default options:
 ```php
@@ -57,28 +77,8 @@ echo Cipher::init($options)->decrypt($encrypted);
 // 4111-1111-1111-1111
 ```
 
-And perhaps most usefully, configure a set of options to reuse throughout your application:
-```php
-<?php
-
-$options = array(
-	// convert output to base 62
-	'base' => 62,
-	// use Rijndael 128
-	'cipher' => MCRYPT_RIJNDAEL_128,
-);
-Cipher::preset('CreditCard', $options);
-// encrypt a credit card number
-$pan = '4111-1111-1111-1111';
-$encrypted = Cipher::preset('CreditCard')->encrypt($pan);
-// "75akCejJpGdZhaWX5ISQPz6uKMcDSdJoTgVfuzYkiK9UpKRLp3wtPSUNWpcBMoCc4"
-// Note: Encrypted strings will be different every time because iv is stored with the output
-echo Cipher::preset('CreditCard')->decrypt($encrypted);
-// 4111-1111-1111-1111
-```
-
 Password Hashing
-==
+====
 
 Passwords are hashed with the latest technique: pbkdf2 algorithm
 
@@ -86,7 +86,7 @@ Passwords are hashed with the latest technique: pbkdf2 algorithm
 <?php
 
 $hash = Cipher::init()->passwordHash('password1');
-// $hash now contains 64 characters of random salt and 64 characters of the hashed password
+// $hash now contains 64 characters of random salt followed by 64 characters of the hashed password
 $isValid = Cipher::init()->validatePassword('password1', $hash);
 // true
 ```
