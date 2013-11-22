@@ -7,7 +7,7 @@ Example using default options:
 ```javascript
 // encrypt a credit card number
 $pan = '4111-1111-1111-1111';
-$encrypted = Cipher::init($pan)->encrypt();
+$encrypted = Cipher::init()->encrypt($pan);
 // "\x9CDmO\x8E>\x0FY\x9EG\xC4Mr\xF3&\x81\xD5\xCCm\xFC\x1C\xB3\x98\x13a\xD7B\xDFL'\x13\xED\xE38\xBC%\x10%\xB55l&\x8E\x81\x16\x9F\x86{"
 // Note: Encrypted strings will be different every time because iv is stored with the output
 echo Cipher::init($encrypted)->decrypt();
@@ -22,7 +22,7 @@ Cipher::$defaultOptions['base'] = 64;
 Cipher::$defaultOptions['cipher'] = MCRYPT_RIJNDAEL_256;
 // encrypt a credit card number
 $pan = '4111-1111-1111-1111';
-$encrypted = Cipher::init($pan)->encrypt();
+$encrypted = Cipher::init()->encrypt($pan);
 // "2IqbHb89kj6CpbDIeQXgdb2PGP/lC7e3xD+QbLyaX7FDhPRM5lyYRkjPMvT3yFAfK/pZh+r2immOCQLR56sL/Q=="
 // Note: Encrypted strings will be different every time because iv is stored with the output
 echo Cipher::init($encrypted)->decrypt();
@@ -39,10 +39,10 @@ $options = array(
 );
 // encrypt a credit card number
 $pan = '4111-1111-1111-1111';
-$encrypted = Cipher::init($pan, $options)->encrypt();
+$encrypted = Cipher::init($options)->encrypt($pan);
 // "fa4ff60081193a45f8d288358e43574c543a6c591723994313c0cabb98a7605ffdbfa4e0ae4c58b97c957708db4826cf0ad3c26ddbff5456887db66a6e3f8a10000"
 // Note: Encrypted strings will be different every time because iv is stored with the output
-echo Cipher::init($encrypted, $options)->decrypt();
+echo Cipher::init($options)->decrypt($encrypted);
 // 4111-1111-1111-1111
 ```
 
@@ -57,9 +57,9 @@ $options = array(
 Cipher::createPreset('CreditCard', $options);
 // encrypt a credit card number
 $pan = '4111-1111-1111-1111';
-$encrypted = Cipher::usePreset('CreditCard', $pan)->encrypt();
+$encrypted = Cipher::usePreset('CreditCard')->encrypt($pan);
 // "75akCejJpGdZhaWX5ISQPz6uKMcDSdJoTgVfuzYkiK9UpKRLp3wtPSUNWpcBMoCc4"
 // Note: Encrypted strings will be different every time because iv is stored with the output
-echo Cipher::usePreset('CreditCard', $encrypted)->decrypt();
+echo Cipher::usePreset('CreditCard')->decrypt($encrypted);
 // 4111-1111-1111-1111
 ```

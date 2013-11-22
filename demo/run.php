@@ -7,7 +7,7 @@ require_once(dirname(__FILE__) . '/../Cipher.php');
 Cipher::$defaultOptions['cipher'] = MCRYPT_RIJNDAEL_256;
 
 
-$out = Cipher::init($_REQUEST['subject'], $_REQUEST['options'])->{$_REQUEST['method']}();
+$out = Cipher::init($_REQUEST['options'])->{$_REQUEST['method']}($_REQUEST['subject']);
 
 if (!$_REQUEST['options']['base']) {
 	$out = preg_replace_callback('/[\x00-\x20\x7F-\xFF]/', 'make_printable', $out);

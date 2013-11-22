@@ -1,16 +1,9 @@
 <?php
 
 /**
- * Object-Oriented PHP class for encrypting, obfuscating and hashing strings with the ability to specify an arbitrary base for output
+ * Class for encrypting, obfuscating and hashing strings with the ability to specify an arbitrary base for output
  */
 class Cipher {
-	
-	/**
-	 * The raw input string
-	 * 
-	 * @var string
-	 */
-	protected $_raw;
 	
 	/**
 	 * The mcrypt block code "ecb", "cbc", "cfb", "ofb", "nofb" or "stream"
@@ -27,7 +20,7 @@ class Cipher {
 	protected $_cipher;
 	
 	/**
-	 * The character base to use (e.g. 64, 16, self:BASE_USER_SAFE)
+	 * The character base to use (e.g. 64, 16, Cipher::BASE_USER_SAFE)
 	 * Set to false to keep all characters as is
 	 * 
 	 * @var string|int|bool
@@ -63,6 +56,27 @@ class Cipher {
 	 * @var bool
 	 */
 	protected $_nullSafe;
+
+	/**
+	 *
+	 * @var string  An algorithm to pass to hash_pbkdf2() - see http://us2.php.net/hash-pbkdf2
+	 * to see the list of supported algorithms on your server, run `php -r 'print_r(hash_algos());'`
+	 */
+	protected $_pbkdf2Algo;
+	
+	/**
+	 *
+	 * @var int  The number of iterations to use in hash_pbkdf2() - see http://us2.php.net/hash-pbkdf2
+	 * defaults to 100000
+	 */
+	protected $_pbkdf2Iterations;
+	
+	/**
+	 *
+	 * @var int  The number of bytes hash_pbkdf2() should use - see http://us2.php.net/hash-pbkdf2
+	 * @example  32 bytes will give a hex-encoded string of length 64. Default is 32
+	 */
+	protected $_pbkdf2Bytes;
 	
 	/**
 	 * List of registered base encoder functions. 
@@ -71,6 +85,13 @@ class Cipher {
 	 * @var array 
 	 */
 	protected static $_baseEncoders = array();
+	
+	/**
+	 * Array of all user-defined presets. A preset is a set of options with which to create a new instance
+	 * 
+	 * @var array
+	 */
+	public static $presets = array();	
 	
 	/**
 	 * Shortcut for outputting a base 52 string that contains no vowels and no symbols thereby avoiding swear words
@@ -91,30 +112,44 @@ class Cipher {
 		'blockmode' => 'cbc',
 		'cipher' => MCRYPT_RIJNDAEL_192,
 		'base' => false,
-		'key' => 'The Narwhals bacon at midnight',
+		'key' => 'obfuscate me',
 		'iv' => false,
 		'base64CharList' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
-		'nullSafe' => true
+		'nullSafe' => true,
+		'pbkdf2Algo' => 'sha256',
+		'pbkdf2Iterations' => 100000,
+		'pbkdf2Bytes' => 32,
+	);
+	
+	protected $_optionNames = array(
+		'blockmode',
+		'cipher',
+		'base',
+		'key',
+		'iv',
+		'base64CharList',
+		'nullSafe',
+		'pbkdf2Algo',
+		'pbkdf2Iterations',
+		'pbkdf2Bytes',
 	);
 	
 	/**
 	 * Static method for returning a Cipher instance
 	 * 
-	 * @param string $raw  The raw string
 	 * @param array $options  Any options you want to set
 	 * @return \Cipher 
 	 */
-	public static function init($raw = "", $options = array()) {
-		return new self($raw, $options);
+	public static function init($options = array()) {
+		return new self($options);
 	}
 	
 	/**
 	 * @param string $raw  The raw string
 	 * @param array $options  Any options you want to set
 	 */
-	public function __construct($raw = "", $options = array()) {
-		$this->_raw = $raw;
-		$this->setOptions(array_merge(self::$defaultOptions, $options));
+	public function __construct($options = array()) {
+		$this->setOptions(array_merge(static::$defaultOptions, $options));
 	}
 	
 	/**
@@ -162,13 +197,13 @@ class Cipher {
 	 * 
 	 * @param int|string $num
 	 *   If false, do not alter output
-	 *   If a number between 2 and 64, us that many characters
-	 *   If self::BASE_USER_SAFE, use a base 54 string that contains no vowels or symbols to avoid swear words
-	 *   If self::BASE_PRINTABLE, use a base 21 string that contains no ambiguous characters like 0 and O or 1 and l
+	 *   If a number between 2 and 64, use that many characters
+	 *   If static::BASE_USER_SAFE, use a base 54 string that contains no vowels or symbols to avoid swear words
+	 *   If static::BASE_PRINTABLE, use a base 21 string that contains no ambiguous characters like 0 and O or 1 and l
 	 * @return \Cipher 
 	 */
 	public function setBase($num) {
-		if (isset(self::$_baseEncoders[$num])) {
+		if (isset(static::$_baseEncoders[$num])) {
 			// keep as is
 		}
 		elseif ($num >= 2 && $num <= 64) {
@@ -193,6 +228,36 @@ class Cipher {
 		return $this->_base;
 	}
 	
+	public function setPbkdf2Algo($algo) {
+		if (!in_array($algo, hash_algos(), true)) {
+			throw new Exception("Unknown pbkdf2 algorithm `$algo`. Allowed algorithms on this server: " . join(', '.hash_algos()));
+		}
+		$this->_pbkdf2Algo = $algo;
+		return $this;
+	}
+	
+	public function getPbkdf2Algo() {
+		return $this->_pbkdf2Algo;
+	}
+	
+	public function setPbkdf2Iterations($num) {
+		$this->_pbkdf2Iterations = $num;
+		return $this;
+	}
+	
+	public function getPbkdf2Iterations() {
+		return $this->_pbkdf2Iterations;
+	}
+	
+	public function setPbkdf2Bytes($num) {
+		$this->_pbkdf2Bytes = $num;
+		return $this;
+	}
+	
+	public function getPbkdf2Bytes() {
+		return $this->_pbkdf2Bytes;
+	}	
+	
 	/**
 	 * Set the default key for two-way encryption
 	 * 
@@ -201,26 +266,6 @@ class Cipher {
 	 */
 	public function setKey($key) {
 		$this->_key = $key;
-		return $this;
-	}
-	
-	/**
-	 * Get the raw input string
-	 * 
-	 * @return string
-	 */
-	public function getRaw() {
-		return $this->_raw;
-	}
-	
-	/**
-	 * Set the raw input string
-	 * 
-	 * @param string $string
-	 * @return \Cipher 
-	 */
-	public function setRaw($string) {
-		$this->_raw = $string;
 		return $this;
 	}
 	
@@ -295,7 +340,7 @@ class Cipher {
 	 * @return \Cipher 
 	 */
 	public function setOption($name, $value) {
-		if (in_array($name, array('blockmode','cipher','base','key','iv','base64CharList','nullSafe'))) {
+		if (in_array($name, $this->_optionNames)) {
 			$this->{"_$name"} = $value;	
 		}
 		else {
@@ -334,91 +379,59 @@ class Cipher {
 	 */
 	public function getOptions() {
 		$options = array();
-		foreach (array('blockmode','cipher','base','key','iv','base64CharList','nullSafe') as $name) {
+		foreach ($this->_optionNames as $name) {
 			$options[$name] = $this->getOption($name);
 		}
 		return $options;
 	}
 	
 	/**
-	 * Array of all user-defined presets. A preset is a set of options with which to create a new instance
-	 * 
-	 * @var array
-	 */
-	public static $presets = array();
-	
-	/**
-	 * Add a preset. A preset is a set of options with which to create a new instance
+	 * Add or access a preset. A preset is a set of options with which to create a new instance
 	 * @example
-	 *   Cipher::createPreset('ConfirmationNumber', array(
+	 *   Cipher::preset('ConfirmationNumber', array(
 	 *     'base' => Cipher::BASE_USER_SAFE,
 	 *     'key' => 'My super secret key',
 	 *   ));
-	 *   $encryptedConfNum = Cipher::usePreset('ConfirmationNumber', '0123456789')->encrypt();
-	 *   $confNum = Cipher::usePreset('ConfirmationNumber', $encryptedConfNum)->decrypt(); 
+	 *   $encryptedConfNum = Cipher::preset('ConfirmationNumber')->encrypt('0123456789');
+	 *   $confNum = Cipher::preset('ConfirmationNumber')->decrypt($encryptedConfNum); 
 	 * 
-	 * @param string $name  The name you will use to access the preset via Cipher::usePreset($name, $text)
-	 * @param array $options  See self::$defaultOptions for available options
+	 * @param string $name  The name you will use to access the preset
+	 * @param array [$options]  See static::$defaultOptions for available options. If not given, a Cipher instance is returned
 	 */
-	public static function createPreset($name, $options) {
-		self::$presets[$name] = $options;
-	}
-	
-	/**
-	 * Use a preset previously defined with self::createPreset
-	 * @example
-	 *   Cipher::createPreset('ConfirmationNumber', array(
-	 *     'base' => Cipher::BASE_USER_SAFE,
-	 *     'key' => 'My super secret key',
-	 *   ));
-	 *   $encryptedConfNum = Cipher::usePreset('ConfirmationNumber', '0123456789')->encrypt();
-	 *   $confNum = Cipher::usePreset('ConfirmationNumber', $encryptedConfNum)->decrypt();
-	 * 
-	 * @param type $name  The name it was defined with in Cipher::createPreset($name, $options)
-	 * @param type $text  The text to encrypt/decrypt
-	 * @return mixed
-	 */
-	public static function usePreset($name, $text) {
-		return self::init($text, @self::$presets[$name]);
-	}
-	
-	/**
-	 * Return subject text if casted to a string. May be encrypted or decrypted.
-	 * 
-	 * @return string
-	 */
-	public function __toString() {
-		return $this->_raw;
+	public static function preset($name, $options = array()) {
+		if (is_array($options)) {
+			static::$presets[$name] = $options;
+			return null;
+		}
+		if (!isset(static::$presets[$name])) {
+			throw new Exception("Cipher preset named `$name` was not found.");
+		}
+		return static::init(static::$presets[$name]);
 	}
 	
 	/**
 	 * Return an encrypted string.
 	 * 
-	 * @param string $key  If not given, use $this->_key
-	 *   There are actually two keys; one is $key, the other is the IV which is prepended to the output string for later reading
-	 *   This two-key method produces a decryptable string that is different every time you encrypt it even with the same key
+	 * @param string $string
 	 * @return string
 	 */
-	public function encrypt($key = null) {
-		if ($key === null) {
-			$key = $this->_key;
-		}
+	public function encrypt($decrypted) {
+		$key = $this->_key;
 		$keySize = mcrypt_get_key_size($this->_cipher, $this->_blockmode);
 		if (strlen($key) > $keySize) {
 			$key = substr($key, 0, $keySize);
 		}
 		$ivsize = mcrypt_get_iv_size($this->_cipher, $this->_blockmode);
-		if ($this->_iv) {
+		if (empty($this->_iv)) {			
+			$iv = mcrypt_create_iv($ivsize, MCRYPT_DEV_URANDOM);
+		}
+		else {
 			$lengthenFactor = ceil($ivsize / strlen($this->_iv));
 			$iv = substr(str_repeat($this->_iv, $lengthenFactor), 0, $ivsize);
 		}
-		else {
-			$iv = mcrypt_create_iv($ivsize);
-		}
-		$decrypted = (string) $this->_raw;
 		$decrypted = $this->_handleNullBytesOnEncrypt($decrypted);
 		$encrypted = mcrypt_encrypt($this->_cipher, $key, $decrypted, $this->_blockmode, $iv);
-		if (!$this->_iv) {
+		if (empty($this->_iv)) {
 			$encrypted = $iv . $encrypted;
 		}
 		$encrypted = $this->_baseEncode($encrypted);
@@ -433,8 +446,8 @@ class Cipher {
 	 *   This two-key method produces a decryptable string that is different every time you encrypt it even with the same key
 	 * @return string
 	 */	
-	public function decrypt($key = null) {
-		if (strlen($this->_raw) == 0) {
+	public function decrypt($str) {
+		if (strlen($str) == 0) {
 			return '';
 		}
 		if ($key === null) {
@@ -444,7 +457,6 @@ class Cipher {
 		if (strlen($key) > $keySize) {
 			$key = substr($key, 0, $keySize);
 		}		
-		$str = $this->_raw;
 		$str = $this->_baseDecode($str);
 		$ivsize = mcrypt_get_iv_size($this->_cipher, $this->_blockmode);
 		if ($this->_iv) {
@@ -513,92 +525,38 @@ class Cipher {
 		}
 		return $decrypted;		
 	}
-	
+
+
 	/**
-	 * Simpler encryption routine that produces the same output every time the key is used
-	 * 
-	 * @param string $key  If not given, use $this->_key
-	 * @return string
+	 * Get a random string of hex characters with the given byte length
+	 * @param int $bytes  The number of bytes. E.g. 32 bytes will produce a 64-character string
+	 * @return string  Hex-encoded bytes
 	 */
-	public function obfuscate($key = null) {
-		if ($key === null) {
-			$key = $this->_key;
-		}
-		$key = base64_encode($key);
-		$keylen = strlen($key);
-		$str = base64_encode($this->_raw);
-		$strlen = strlen($str);
-		$buffer = '';
-		for ($i = 0; $i < $strlen; $i++) {
-			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, $i % $keylen, 1));
-			$buffer .= chr($strord ^ $keyord);
-		}
-		$buffer = $this->_baseEncode($buffer);
-		return $buffer;
-	}
+	public static function random($bytes) {
+		return bin2hex(openssl_random_pseudo_bytes($bytes));
+	}	
 	
 	/**
-	 * Simpler decryption routine that produces the same output every time the key is used
-	 * 
-	 * @param string $key  If not given, use $this->_key
-	 * @return string
-	 */	
-	public function unobfuscate($key = null) {
-		if ($key === null) {
-			$key = $this->_key;
-		}
-		$str = $this->_raw;
-		$str = $this->_baseDecode($str);	
-		$key = base64_encode($key);
-		$keylen = strlen($key);
-		$strlen = strlen($str);
-		$buffer = '';
-		for ($i = 0; $i < $strlen; $i++) {
-			$strord = ord(substr($str, $i, 1));
-			$keyord = ord(substr($key, $i % $keylen, 1));
-			$buffer .= chr($strord ^ $keyord);
-		}
-		$buffer = base64_decode($buffer);
-		return $buffer;
-	}
-	
-	/**
-	 * Produce a random hash of the given length
-	 * 
-	 * @param int $length
-	 * @return string 
+	 * Static method to produce a unique md5 in base52 that excludes vowels
+	 * @param int $bytes  The number of bytes the result should be
+	 * @return string  Random number in base52
 	 */
-	public function random($length = 40) {
-		$buffer = '';
-		while (strlen($buffer) < $length) {
-			$str = sha1('sha1', $this->_raw . microtime() . uniqid());
-			$str = $this->_baseEncode($str);
-			$buffer .= $str;
-		}
-		return substr($buffer, 0, $length);
+	public static function slug($bytes) {
+		return Cipher::baseConvertString(
+			static::random($bytes),
+			'0123456789abcdef',
+			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
+		);
 	}
 	
 	/**
-	 * Static method to produce a random hash of the given length and base
-	 * 
-	 * @param int $length
-	 * @param int|string $base
-	 * @return string
-	 */
-	public static function slug($length = 40, $base = 'user_safe') {
-		return self::init()->setBase($base)->random($length);
-	}
-	
-	/**
-	 * Return a hash using the given method (e.g. sha1, in the set base)
+	 * Return a hash using the given algorithm (e.g. sha1, in the set base)
 	 * 
 	 * @param string $method  (sha1/sha256/md5)
 	 * @return string 
 	 */
-	public function hash($method = 'sha1') {
-		$str = $this->_raw;
-		$str = $method($str);
+	public function hash($str, $method = 'sha256') {
+		$str = hash_hmac($method, $str);
 		$str = $this->_baseEncode($str);
 		return $str;
 	}
@@ -611,7 +569,7 @@ class Cipher {
 	 * @param callback $decoder  Callback that takes encoded string and returns unencoded string
 	 */
 	public static function registerBaseEncoder($name, $encoder, $decoder) {
-		self::$_baseEncoders[$name] = array('encode' => $encoder, 'decode' => $decoder);
+		static::$_baseEncoders[$name] = array('encode' => $encoder, 'decode' => $decoder);
 	}
 	
 	/**
@@ -620,7 +578,7 @@ class Cipher {
 	 * @param string $name 
 	 */
 	public static function unregisterBaseEncoder($name) {
-		unset(self::$_baseEncoders[$name]);
+		unset(static::$_baseEncoders[$name]);
 	}
 	
 	/**
@@ -629,7 +587,7 @@ class Cipher {
 	 * @return array
 	 */
 	public static function getBaseEncoders() {
-		return self::$_baseEncoders;
+		return static::$_baseEncoders;
 	}
 	
 	/**
@@ -639,10 +597,10 @@ class Cipher {
 	 * @return array  Null if not found
 	 */
 	public static function getBaseEncoder($name) {
-		if (!isset(self::$_baseEncoders[$name])) {
+		if (!isset(static::$_baseEncoders[$name])) {
 			return null;
 		}
-		return self::$_baseEncoders[$name];
+		return static::$_baseEncoders[$name];
 	}
 	
 	/**
@@ -654,14 +612,14 @@ class Cipher {
 	protected function _baseEncode($str) {
 		if ($this->_base) {
 			$str = base64_encode($str);			
-			//$str = rtrim($str, '='); // equals signs are just padding that php doesn't need to decode
+			$str = rtrim($str, '='); // equals signs are just padding that php doesn't need to decode
 		}
-		if (isset(self::$_baseEncoders[$this->_base])) {
-			$str = call_user_func(self::$_baseEncoders[$this->_base]['encode'], $str);
+		if (isset(static::$_baseEncoders[$this->_base])) {
+			$str = call_user_func(static::$_baseEncoders[$this->_base]['encode'], $str);
 		}		
 		elseif ($this->_base >= 2 && $this->_base < 64) {
 			// arbitrary base
-			$str = self::baseConvertString($str, $this->_base64CharList, substr($this->_base64CharList,0,$this->_base));
+			$str = static::baseConvertString($str, $this->_base64CharList, substr($this->_base64CharList,0,$this->_base));
 		}
 		return $str;		
 	}
@@ -673,12 +631,12 @@ class Cipher {
 	 * @return string
 	 */	
 	protected function _baseDecode($str) {
-		if (isset(self::$_baseEncoders[$this->_base])) {
-			$str = call_user_func(self::$_baseEncoders[$this->_base]['decode'], $str);
+		if (isset(static::$_baseEncoders[$this->_base])) {
+			$str = call_user_func(static::$_baseEncoders[$this->_base]['decode'], $str);
 		}
 		elseif ($this->_base >= 2 && $this->_base < 64) {
 			// arbitrary base
-			$str = self::baseConvertString($str, substr($this->_base64CharList,0,$this->_base), $this->_base64CharList);
+			$str = static::baseConvertString($str, substr($this->_base64CharList,0,$this->_base), $this->_base64CharList);
 		}
 		if ($this->_base) {
 			$str = base64_decode($str);
@@ -725,7 +683,7 @@ class Cipher {
 				}
 			}
 			$length = $newlen;
-			$result = $sToMap{$divide} . $result;
+			$result = substr($sToMap, $divide, 1) . $result;
 		} while ($newlen != 0);
 		// pad with the leading zeros they came in with
 		$fromZero = $sFromMap{0};
@@ -738,6 +696,123 @@ class Cipher {
 		return $result;	
 	}
 	
+	/**
+	 * Obfuscate a string
+	 * That is, create a string in the form "$payload-$hashOfPayload" 
+	 *   where $hashOfPayload is generated from a sha1 of $payload and $this->_key for salt
+	 *   Then base encode it so it has no dash
+	 * Then, using unobfuscate, we base decode it into its dashed form
+	 *   And check that the payload hash matches
+	 * Useful for vanilla attacks where payload is not secret, but it might be an ID
+	 *   That would allow an attacker to simply increment the ID
+	 * @param string $string
+	 * @param int [$length=7]  Uses this many characters of the hash
+	 *   there is no need that the hash be unique, just that the payload-hash combination is unique
+	 * @return string
+	 */
+	public function obfuscate($string, $length = 7) {
+		$salt = $this->_key;
+		$hash = sha1($string . $salt);
+		$hashPart = substr($hash, 0, $length);
+		$token = $this->_baseEncode($string . '-' . $hashPart);
+		return $token;
+	}
+
+	/**
+	 * Retreive a value that was obfuscated using $this->obfuscate()
+	 * @param string $string
+	 * @param int [$length=7]
+	 * @return string
+	 */
+	public function unobfuscate($string, $length = 7) {
+		$salt = $this->_key;
+		$decoded = $this->_baseDecode($string);
+		list($value, $token) = explode('-', $decoded);
+		$expectedToken = substr(sha1($value . $salt), 0, $length);
+		return $token == $expectedToken ? $value : null;
+	}
+
+	/**
+	 * Hash a password using PBKDF2 and random salt
+	 * Under default options, it returns a 128-character string 
+	 * that contains the salt and the computed hash
+	 * @param string $password  The password to hash
+	 * @param string [$salt]  The salt to use. If not given, a random salt is used. Random salt is recommended.
+	 * @return string  The salt and hash concatenated. Send to $this->validatePassword to check it
+	 */
+	public function hashPassword($password, $salt = null) {		
+		$salt = $salt ?: static::random($this->_pbkdf2Bytes);
+		$hash = hash_pbkdf2(
+			$this->_pbkdf2Algo,
+			$password,
+			$salt,
+			$this->_pbkdf2Iterations,
+			$this->_pbkdf2Bytes,
+			false
+		);
+		return $salt . $hash;
+	}
+
+	/**
+	 * Validate a password against the given string consisting of salt concatenated with a hash
+	 * @param string $password  The password to check
+	 * @param string $againstSaltAndHash  The salt + hash string (that was returned from hashPassword) to which to compare
+	 * @return bool  True if the password matches the salt
+	 */
+	public function validatePassword($password, $againstSaltAndHash) {
+		$len = $this->_pbkdf2Bytes * 2;
+		$usedSalt = substr($againstSaltAndHash, 0, $len);
+		$computedHash = $this->hashPassword($password, $usedSalt);
+		return ($computedHash == $againstSaltAndHash);
+	}
+
+}
+
+/*
+ * PBKDF2 key derivation function as defined by RSA's PKCS #5: https://www.ietf.org/rfc/rfc2898.txt
+ * $algorithm - The hash algorithm to use. Recommended: SHA256
+ * $password - The password.
+ * $salt - A salt that is unique to the password.
+ * $count - Iteration count. Higher is better, but slower. Recommended: At least 1024.
+ * $key_length - The length of the derived key in bytes.
+ * $raw_output - If true, the key is returned in raw binary format. Hex encoded otherwise.
+ * Returns: A $key_length-byte key derived from the password and salt.
+ *
+ * Test vectors can be found here: https://www.ietf.org/rfc/rfc6070.txt
+ *
+ * This implementation of PBKDF2 was originally created by defuse.ca
+ * With improvements by variations-of-shadow.com
+ */
+if (!function_exists('hash_pbkdf2')) {
+	function hash_pbkdf2($algorithm, $password, $salt, $count, $key_length, $raw_output = false)
+	{
+		$algorithm = strtolower($algorithm);
+		if(!in_array($algorithm, hash_algos(), true))
+			die("PBKDF2 ERROR: Invalid hash algorithm `$algorithm`.");
+		if($count <= 0 || $key_length <= 0)
+			die('PBKDF2 ERROR: Invalid parameters.');
+
+		$hash_length = strlen(hash($algorithm, "", true));
+		$block_count = ceil($key_length / $hash_length);
+
+		$output = "";
+		for($i = 1; $i <= $block_count; $i++) {
+			// $i encoded as 4 bytes, big endian.
+			$last = $salt . pack("N", $i);
+			// first iteration
+			$last = $xorsum = hash_hmac($algorithm, $last, $password, true);
+			// perform the other $count - 1 iterations
+			for ($j = 1; $j < $count; $j++) {
+				$xorsum ^= ($last = hash_hmac($algorithm, $last, $password, true));
+			}
+			$output .= $xorsum;
+		}
+
+		if($raw_output)
+			return substr($output, 0, $key_length);
+		else
+			return bin2hex(substr($output, 0, $key_length));
+	}
 }
 
 //
@@ -745,33 +820,33 @@ class Cipher {
 //
 Cipher::registerBaseEncoder(Cipher::BASE_USER_SAFE, 
 	// remove all vowels to avoid bad words and remove symbols for simplicity
-	create_function('$str', "
-		return Cipher::baseConvertString(\$str,
+	function($str) {
+		return Cipher::baseConvertString($str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
 		);
-	"), 
-	create_function('$str', "
-		return Cipher::baseConvertString(\$str,
+	}, 
+	function($str) {
+		return Cipher::baseConvertString($str,
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	")
+	}
 );
 
 Cipher::registerBaseEncoder(Cipher::BASE_PRINTABLE, 
 	// keep only characters that are highly visually distinct
 	// e.g. a password that you might right down
-	create_function('$str', "
-		return Cipher::baseConvertString(\$str,
+	function($str) {
+		return Cipher::baseConvertString($str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'3467bcdfhjkmnpqrtvwxy'
 		);
-	"), 
-	create_function('$str', "
-		return Cipher::baseConvertString(\$str,
+	}, 
+	function($str) {
+		return Cipher::baseConvertString($str,
 			'3467bcdfhjkmnpqrtvwxy',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	")
+	}
 );

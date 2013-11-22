@@ -6,8 +6,9 @@ Cipher::$defaultOptions['base'] = 62;
 
 $begin = microtime(true);
 
-foreach (range(1000,1050) as $i) {
-	echo "\n$i =&gt; " . ($o = Cipher::init()->encrypt($i)) . ' =&gt; ' . Cipher::init()->decrypt($o);
+foreach (range(1,3) as $i) {
+	$password = uniqid();
+	echo "\n$i =&gt; " . ($o = Cipher::init()->hashPassword($password)) . ' =&gt; matches? ' . (int) Cipher::init()->validatePassword($password, $o);
 }
 
 $end = round(microtime(true) - $begin,3);
