@@ -35,7 +35,7 @@ class Cipher {
 	protected $_key;
 	
 	/**
-	 * The IV to use (if not supplied, one will be randomly generated and prepended to the encrypted string)
+	 * The IV to use (if falsy, one will be randomly generated and prepended to the encrypted string)
 	 * Will be padded or truncated to be the right size to fit the cipher and block mode
 	 * Setting the IV will cause the encrypted value to be the same every time and make the output shorter
 	 * 
@@ -48,10 +48,10 @@ class Cipher {
 	 * 
 	 * @var string 
 	 */
-	protected $_base64CharList;
+	protected $_baseCharList;
 	
 	/**
-	 * If false, null bytes will be stripped (and lost) from the end of the plaintext
+	 * If false, null bytes will be stripped (and lost) from the end of the plaintext. Default is true.
 	 * 
 	 * @var bool
 	 */
@@ -104,6 +104,11 @@ class Cipher {
 	const BASE_PRINTABLE = 'printable';
 	
 	/**
+	 * Shortcut for outputting a base 95 string that contains all printable ascii characters + space
+	 */	
+	const BASE_ASCII = 'ascii';
+	
+	/**
 	 * The default options for new objects
 	 * 
 	 * @var array
@@ -114,20 +119,24 @@ class Cipher {
 		'base' => false,
 		'key' => 'obfuscate me',
 		'iv' => false,
-		'base64CharList' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
+		'baseCharList' => '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/ !"#$%&\'()*,-.:;<=>?@[\\]^_`{|}~',
 		'nullSafe' => true,
 		'pbkdf2Algo' => 'sha256',
 		'pbkdf2Iterations' => 100000,
 		'pbkdf2Bytes' => 32,
 	);
 	
+	/**
+	 * The names of all the supported options (see Cipher::$defaultOptions)
+	 * @var array
+	 */
 	protected $_optionNames = array(
 		'blockmode',
 		'cipher',
 		'base',
 		'key',
 		'iv',
-		'base64CharList',
+		'baseCharList',
 		'nullSafe',
 		'pbkdf2Algo',
 		'pbkdf2Iterations',
@@ -197,7 +206,7 @@ class Cipher {
 	 * 
 	 * @param int|string $num
 	 *   If false, do not alter output
-	 *   If a number between 2 and 64, use that many characters
+	 *   If a number between 2 and 95, use that many characters
 	 *   If static::BASE_USER_SAFE, use a base 54 string that contains no vowels or symbols to avoid swear words
 	 *   If static::BASE_PRINTABLE, use a base 21 string that contains no ambiguous characters like 0 and O or 1 and l
 	 * @return \Cipher 
@@ -206,7 +215,7 @@ class Cipher {
 		if (isset(static::$_baseEncoders[$num])) {
 			// keep as is
 		}
-		elseif ($num >= 2 && $num <= 64) {
+		elseif ($num >= 2 && $num <= 95) {
 			$num = (int) $num;
 		}
 		elseif (strlen($num)) {
@@ -228,6 +237,12 @@ class Cipher {
 		return $this->_base;
 	}
 	
+	/**
+	 * Set the pbkdf2 algorithm, for a list of supported algorithms on a server, run hash_algos()
+	 * @param string $algo  The name of the algorithm (sha256 is recommended and default)
+	 * @return \Cipher
+	 * @throws Exception if algorithm is unknown
+	 */
 	public function setPbkdf2Algo($algo) {
 		if (!in_array($algo, hash_algos(), true)) {
 			throw new Exception("Unknown pbkdf2 algorithm `$algo`. Allowed algorithms on this server: " . join(', '.hash_algos()));
@@ -236,24 +251,46 @@ class Cipher {
 		return $this;
 	}
 	
+	/**
+	 * Get the currently set pbkdf2 algorithm
+	 * @return string
+	 */
 	public function getPbkdf2Algo() {
 		return $this->_pbkdf2Algo;
 	}
 	
+	/**
+	 * Set the number of iterations to run in Cipher::hashPassword(). Higher numbers mean more computation time and harder to crack hashes
+	 * @param int $num
+	 * @return \Cipher
+	 */
 	public function setPbkdf2Iterations($num) {
-		$this->_pbkdf2Iterations = $num;
+		$this->_pbkdf2Iterations = (int) $num;
 		return $this;
 	}
 	
+	/**
+	 * Get the number of iterations to run in Cipher::hashPassword()
+	 * @return int
+	 */
 	public function getPbkdf2Iterations() {
 		return $this->_pbkdf2Iterations;
 	}
 	
+	/**
+	 * Set the byte length of the output for Cipher::hashPassword(). 32 bytes results in a 64-character string in base 16. 32 is default
+	 * @param int $num
+	 * @return \Cipher
+	 */
 	public function setPbkdf2Bytes($num) {
 		$this->_pbkdf2Bytes = $num;
 		return $this;
 	}
 	
+	/**
+	 * Get the current value for pbkdf2 bytes
+	 * @return int
+	 */
 	public function getPbkdf2Bytes() {
 		return $this->_pbkdf2Bytes;
 	}	
@@ -298,7 +335,7 @@ class Cipher {
 	 * @return \Cipher 
 	 */
 	public function setBase64CharList($str) {
-		$this->_base64CharList = $str;
+		$this->_baseCharList = $str;
 		return $this;
 	}
 	
@@ -308,7 +345,7 @@ class Cipher {
 	 * @return string
 	 */
 	public function getBase64CharList() {
-		return $this->_base64CharList;
+		return $this->_baseCharList;
 	}
 	
 	/**
@@ -335,7 +372,7 @@ class Cipher {
 	/**
 	 * Set the given option
 	 * 
-	 * @param string $name  "blockmode", "cipher", "base", "key", "iv", "base64CharList", or "nullSafe"
+	 * @param string $name  "blockmode", "cipher", "base", "key", "iv", "baseCharList", or "nullSafe"
 	 * @param mixed $value
 	 * @return \Cipher 
 	 */
@@ -412,7 +449,7 @@ class Cipher {
 	/**
 	 * Return an encrypted string.
 	 * 
-	 * @param string $string
+	 * @param string $decrypted  The plain-text string
 	 * @return string
 	 */
 	public function encrypt($decrypted) {
@@ -439,10 +476,10 @@ class Cipher {
 	}
 	
 	/**
-	 * Return an decrypted string.
+	 * Return a decrypted string.
 	 * 
-	 * @param string $key  If not given, use $this->_key
-	 *   There are actually two keys; one is $key, the other is the IV which is prepended to the output string for later reading
+	 * @param string $str  The encrypted string
+	 *   There are actually two keys; one is $this->_key, the other is the IV which is prepended to the output string for later reading
 	 *   This two-key method produces a decryptable string that is different every time you encrypt it even with the same key
 	 * @return string
 	 */	
@@ -450,9 +487,7 @@ class Cipher {
 		if (strlen($str) == 0) {
 			return '';
 		}
-		if ($key === null) {
-			$key = $this->_key;
-		}
+		$key = $this->_key;
 		$keySize = mcrypt_get_key_size($this->_cipher, $this->_blockmode);
 		if (strlen($key) > $keySize) {
 			$key = substr($key, 0, $keySize);
@@ -542,7 +577,7 @@ class Cipher {
 	 * @return string  Random number in base52
 	 */
 	public static function slug($bytes) {
-		return Cipher::baseConvertString(
+		return Cipher::baseConvertMapped(
 			static::random($bytes),
 			'0123456789abcdef',
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
@@ -565,11 +600,11 @@ class Cipher {
 	 * Register an encoder/decoder pair for converting strings in arbitrary bases
 	 * 
 	 * @param string $name  The name that is used by ->setBase($name)
-	 * @param callback $encoder  Callback that takes unencoded string and returns encoded string
-	 * @param callback $decoder  Callback that takes encoded string and returns unencoded string
+	 * @param callback $methods[encoder]  Callback that takes unencoded string and returns encoded string
+	 * @param callback $methods[decoder]  Callback that takes encoded string and returns unencoded string
 	 */
-	public static function registerBaseEncoder($name, $encoder, $decoder) {
-		static::$_baseEncoders[$name] = array('encode' => $encoder, 'decode' => $decoder);
+	public static function registerBaseEncoder($name, $methods) {
+		static::$_baseEncoders[$name] = $methods;
 	}
 	
 	/**
@@ -617,9 +652,9 @@ class Cipher {
 		if (isset(static::$_baseEncoders[$this->_base])) {
 			$str = call_user_func(static::$_baseEncoders[$this->_base]['encode'], $str);
 		}		
-		elseif ($this->_base >= 2 && $this->_base < 64) {
+		elseif ($this->_base >= 2 && $this->_base < 95) {
 			// arbitrary base
-			$str = static::baseConvertString($str, $this->_base64CharList, substr($this->_base64CharList,0,$this->_base));
+			$str = static::baseConvertMapped($str, $this->_baseCharList, substr($this->_baseCharList,0,$this->_base));
 		}
 		return $str;		
 	}
@@ -634,9 +669,9 @@ class Cipher {
 		if (isset(static::$_baseEncoders[$this->_base])) {
 			$str = call_user_func(static::$_baseEncoders[$this->_base]['decode'], $str);
 		}
-		elseif ($this->_base >= 2 && $this->_base < 64) {
+		elseif ($this->_base >= 2 && $this->_base < 95) {
 			// arbitrary base
-			$str = static::baseConvertString($str, substr($this->_base64CharList,0,$this->_base), $this->_base64CharList);
+			$str = static::baseConvertMapped($str, substr($this->_baseCharList,0,$this->_base), $this->_baseCharList);
 		}
 		if ($this->_base) {
 			$str = base64_decode($str);
@@ -653,9 +688,9 @@ class Cipher {
 	* @param string $sTomMap  the ascii string to encode the string
 	* @return string
 	* @example
-	* Cipher::baseConvertString('0010','01234567','abcdefghij'); // aai
+	* Cipher::baseConvertMapped('0010','01234567','abcdefghij'); // aai
 	*/
-	public static function baseConvertString($sNumber, $sFromMap, $sToMap) {
+	public static function baseConvertMapped($sNumber, $sFromMap, $sToMap) {
 		// interpret subject as a string
 		$sNumber = (string) $sNumber;
 		// get our lengths
@@ -665,7 +700,7 @@ class Cipher {
 		// build an array of numbers based on positions in the from and to maps
 		$aDigits = array();
 		for ($i = 0; $i < $length; $i++) {
-			$aDigits[$i] = strpos($sFromMap, $sNumber{$i});
+			$aDigits[$i] = strpos($sFromMap, substr($sNumber, $i, 1));
 		}
 		// start our buffer
 		$result = '';
@@ -686,14 +721,36 @@ class Cipher {
 			$result = substr($sToMap, $divide, 1) . $result;
 		} while ($newlen != 0);
 		// pad with the leading zeros they came in with
-		$fromZero = $sFromMap{0};
+		$fromZero = substr($sFromMap, 0, 1);
 		if (preg_match('/^' . preg_quote($fromZero) . '+/', $sNumber, $match)) {
-			$toZero = $sToMap{0};
+			$toZero = substr($sToMap, 0, 1);
 			$zeroPad = str_repeat($toZero, strlen($match[0]));
 			$result = $zeroPad . $result;
 		}
 		trim($result, "\x00");
 		return $result;	
+	}
+	
+	/**
+	 * 
+	 * @param string $stringNumber  A string containing printable ascii characters (0x20 through 0x7e)
+	 * @param int $fromBase  A base between 2 and 95
+	 * @param int $toBase  A base between 2 and 95
+	 * @return string  The converted string
+	 * @throws Exception
+	 */
+	public static function baseConvert($stringNumber, $fromBase, $toBase) {
+		$stringNumber = (string) $stringNumber;
+		$fromBase = (int) $fromBase;
+		$toBase = (int) $toBase;
+		if ($fromBase < 2 || $fromBase > 95 || $toBase < 2 || $toBase > 95) {
+			throw new Exception("Error converting number; bases must be between 2 and 95");
+		}
+		if ($fromBase == $toBase) {
+			return $stringNumber;
+		}
+		static $map = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/ !"#$%&\'()*,-.:;<=>?@[\\]^_`{|}~';
+		return static::baseConvertMapped($stringNumber, substr($map, 0, $fromBase), substr($map, 0, $toBase));
 	}
 	
 	/**
@@ -818,35 +875,51 @@ if (!function_exists('hash_pbkdf2')) {
 //
 // Register some cool base encoders
 //
-Cipher::registerBaseEncoder(Cipher::BASE_USER_SAFE, 
+Cipher::registerBaseEncoder(Cipher::BASE_USER_SAFE, array(
 	// remove all vowels to avoid bad words and remove symbols for simplicity
-	function($str) {
-		return Cipher::baseConvertString($str,
+	'encode' => function($str) {
+		return Cipher::baseConvertMapped($str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ'
 		);
 	}, 
-	function($str) {
-		return Cipher::baseConvertString($str,
+	'decode' => function($str) {
+		return Cipher::baseConvertMapped($str,
 			'0123456789bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	}
+	})
 );
 
-Cipher::registerBaseEncoder(Cipher::BASE_PRINTABLE, 
+Cipher::registerBaseEncoder(Cipher::BASE_PRINTABLE, array(
 	// keep only characters that are highly visually distinct
 	// e.g. a password that you might right down
-	function($str) {
-		return Cipher::baseConvertString($str,
+	'encode' => function($str) {
+		return Cipher::baseConvertMapped($str,
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
 			'3467bcdfhjkmnpqrtvwxy'
 		);
 	}, 
-	function($str) {
-		return Cipher::baseConvertString($str,
+	'decode' => function($str) {
+		return Cipher::baseConvertMapped($str,
 			'3467bcdfhjkmnpqrtvwxy',
 			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
 		);
-	}
+	})
+);
+
+Cipher::registerBaseEncoder(Cipher::BASE_ASCII, array(
+	// all 95 printable ascii characters + space
+	'encode' => function($str) {
+		return Cipher::baseConvertMapped($str,
+			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/ !"#$%&\'()*,-.:;<=>?@[\\]^_`{|}~',
+			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/'
+		);
+	}, 
+	'decode' => function($str) {
+		return Cipher::baseConvertMapped($str,
+			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/',
+			'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/ !"#$%&\'()*,-.:;<=>?@[\\]^_`{|}~'
+		);
+	})
 );
